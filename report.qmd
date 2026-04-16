@@ -1,0 +1,173 @@
+---
+title: "Assignment 1: Effect of Marketing Spend on Purchase Amount"
+author: "Aarushi Dandriyal (36621617)"
+format:
+  html: default
+  pdf: default
+execute: 
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r Loading-Libraires}
+
+library(tidyverse)
+library(lubridate)
+library(knitr)
+library(kableExtra) 
+library(scales) 
+
+```
+
+## Introduction
+
+Over the last quarter, our company ran a marketing campaign where we varied how much we spent contacting individual customers (ads, emails, coupons). We will be using this data to determine if higher marketing spend per customer lead to higher purchase amounts. We would also be comparing the data between different customer segments.
+
+## Research Questions
+
+Using the data from the campaign, this report investigates whether higher per-customer marketing spend is associated with higher purchase amounts. The aim is to assess whether increasing marketing investment is an effective strategy for driving customer spending and to gain insight into the potential return on investment.
+
+## Dataset Introduction
+
+The dataset consists of customer-level observations from a marketing campaign carried out over a quarter by a retailer. Each row represents a unique customer capturing both the marketing spend allocated to them and their resulting purchase behavior.
+
+```{r}
+#| label: loading-data
+
+raw_data <- read_csv("data/marketing_data.csv")
+
+```
+
+### Data Cleaning
+
+```{r}
+str(raw_data)
+```
+
+The dataset contains 150 observations and 7 variables. Initial inspection of the data structure revealed several issues that required cleaning prior to analysis.
+
+Firstly, sign_up variable was stored as a character string in multiple inconsistent formats. To ensure consistency, it was converted into a standard date format using the 'parse_date_time()' function.
+
+Secondly, the dataset contained missing values across several variables. Observations with incomplete values were removed to ensure the reliability of the analysis.
+
+Finally, the notes variable was excluded from the dataset, as it contained non-essential information that was not relevant to the research objectives.
+
+```{r}
+#| label: data-cleaning
+
+cleaned_data <- raw_data |>
+  
+  mutate(
+    signup_date = parse_date_time(
+      signup_date,
+      orders = c("ymd", "dmy", "mdy"),
+      quiet = TRUE
+    )
+  ) |>
+  
+  select(-notes) |>
+  
+  drop_na()
+
+```
+
+### Dataset Description
+
+```{r}
+
+
+num_obs  <- nrow (cleaned_data)
+num_vars <- ncol (cleaned_data)
+
+
+```
+
+After cleaning, the data set has `r num_obs` rows and `r num_vars` columns.
+
+```{r}
+#| label: table-summary
+#| tbl-cap: "Campaign Summary"
+
+summary_table <- cleaned_data |> 
+  group_by(segment) |> 
+  summarise(
+    n = n(),
+    avg_spend = mean(marketing_spend),
+    avg_purchase = mean(purchase_amount),
+    avg_visits = mean(visits)
+  )
+
+kable(
+  summary_table, 
+  digits = 2,
+  col.names = c("Customer Segment", "Total Customers", "Average Spend", "Average Purchase", "Average Visits")
+)
+```
+
+The above table gives us a summary of how many observations have been recorded for different segments, along with the average spend, purchase and visits for each of the segments.
+
+```{r}
+#| label: fig-purchase-segment
+#| fig-cap: "Distribution of purchase amounts across customer segments"
+
+ggplot(cleaned_data, 
+       aes(x = segment, y = purchase_amount)) +
+  geom_boxplot() +
+  labs(
+    x = "Customer Segment",
+    y = "Purchase Amount"
+  ) +
+  theme_minimal()
+```
+
+The distribution of purchase amounts varies across customer segments, as shown in @fig-purchase-segment. Looking at the box plot, we notice that enterprise customers have the highest median purchase amount. In contrast, SMB customers have the lowest median purchase amount and also show a wider spread suggesting greater variability in spending behavior. Consumer customers fall between the two.
+
+### Results
+
+```{r}
+#| label: fig-segment-relationship
+#| fig-cap: "Relationship between marketing spend and purchase amount across customer segments"
+
+ggplot(cleaned_data, aes(x = marketing_spend, y = purchase_amount)) +
+  geom_point(alpha = 0.7, color = "steelblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  facet_wrap(~ segment) +
+  labs(
+    x = "Marketing Spend",
+    y = "Purchase Amount"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: fig-facet
+#| fig-cap: "Scatter plots of marketing spend versus purchase amount, split by customer segment"
+#| fig-width: 8
+#| fig-height: 4
+
+ggplot(cleaned_data,
+       aes(x = marketing_spend, y = purchase_amount, colour = segment)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, colour = "black") +
+  facet_wrap(~ segment) +
+  labs(
+    x = "Marketing Spend (USD)",
+    y = "Purchase Amount (USD)"
+  ) +
+  theme_minimal(base_size = 13)
+
+```
+
+```{r}
+# model-marketing-spend
+
+model <- lm(purchase_amount ~ marketing_spend, data = cleaned_data)
+summary(model)
+```
+
+The relationship between marketing spend and purchase amount was explored using a scatter plot and a linear regression model. As shown in @fig-segment-relationship there is a positive relationship between the two variables. This indicates customers who receive higher marketing spend tend to spend more.
+
+A linear regression model was fitted to measure this relationship. The results show that marketing spend is a good predictor of purchase amount (p \< 0.001). The estimated effect is `r round(coef(model)[2], 3)`, meaning that for every 1 unit increase in marketing spend, purchase amount increases by about `r round(coef(model)[2], 3)` units on average.
+
+The R-squared value is `r round(summary(model)$r.squared, 3)`, which means that about `r round(summary(model)$r.squared * 100, 1)`% of the variation in purchase amount can be explained by marketing spend. This suggests that marketing spend has an important but not complete influence on customer purchases.
